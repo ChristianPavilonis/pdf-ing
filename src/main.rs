@@ -1,126 +1,194 @@
-use std::{f32, fs::File, io::BufWriter};
+use std::{
+    error::Error,
+    f32,
+    fs::{File, OpenOptions},
+    io::{BufWriter, Cursor, Read},
+    path::Path,
+};
 
+use image_crate::codecs::jpeg::JpegDecoder;
 use printpdf::*;
 
 fn main() {
-    generate_pdf(
-        DocConfig::new(215.9, 279.4),
-        vec![
-            Block {
-                pos: (16.0, 16.0),
-                items: vec![
-                    Item::Text {
-                        content: "Introduction Header".to_string(),
-                        font_size: 16.0,
-                        line_height: 24.0,
-                    },
-                    Item::Text {
-                        content: "Content under introduction".to_string(),
-                        font_size: 12.0,
-                        line_height: 18.0,
-                    },
-                ],
-            },
-            Block {
-                pos: (16.0, 100.0),
-                items: vec![
-                    Item::Text {
-                        content: "Chapter 1 Header".to_string(),
-                        font_size: 16.0,
-                        line_height: 24.0,
-                    },
-                    Item::Text {
-                        content: "Content of Chapter 1 delving into the intricacies of the topic."
-                            .to_string(),
-                        font_size: 12.0,
-                        line_height: 18.0,
-                    },
-                    Item::Text {
-                        content: "Continuation with Seinfeld humor...yada yada yada.".to_string(),
-                        font_size: 12.0,
-                        line_height: 18.0,
-                    },
-                ],
-            },
-            Block {
-                pos: (16.0, 200.0),
-                items: vec![
-                    Item::Text {
-                        content: "Chapter 2 Header".to_string(),
-                        font_size: 16.0,
-                        line_height: 24.0,
-                    },
-                    Item::Text {
-                        content: "Content of Chapter 2 exploring new dimensions.".to_string(),
-                        font_size: 12.0,
-                        line_height: 18.0,
-                    },
-                ],
-            },
-        ],
-    );
+    let doc = Doc::new(215.9, 279.4);
+
+    let blocks: Vec<Box<dyn Renderable>> = vec![
+        Box::new(Image {
+            path: "./quantum-joe.jpeg",
+            dpi: 300.0,
+            pos: (200.0, 20.0),
+        }),
+        Box::new(TextSection {
+            nodes: vec![
+                Text {
+                    content: "Serendipitous Reflections".to_string(),
+                    font_size: 24.0,
+                    line_height: 24.0,
+                },
+                Text {
+                    content: "In the grand tapestry of life's comedy, \n\
+                the keen eye discerns humor lurking amidst the everyday trivialities."
+                        .to_string(),
+                    font_size: 12.0,
+                    line_height: 14.0,
+                },
+            ],
+            pos: (20.0, 40.0),
+        }),
+        Box::new(TextSection {
+            nodes: vec![
+                Text {
+                    content: "Tapestry of Time".to_string(),
+                    font_size: 24.0,
+                    line_height: 24.0,
+                },
+                Text {
+                    content: "Behold! The threads of fate weaving storied pasts \n\
+                with present musings, like a fashion show designed by Cosmo Kramer."
+                        .to_string(),
+                    font_size: 12.0,
+                    line_height: 14.0,
+                },
+            ],
+            pos: (20.0, 100.0),
+        }),
+        Box::new(TextSection {
+            nodes: vec![
+                Text {
+                    content: "Whispers of Evolution".to_string(),
+                    font_size: 24.0,
+                    line_height: 24.0,
+                },
+                Text {
+                    content: "Unceasing metamorphosis defines our journey, \n\
+                linked indelibly to the reverberations of existence—Kramer's vision personified."
+                        .to_string(),
+                    font_size: 12.0,
+                    line_height: 14.0,
+                },
+            ],
+            pos: (20.0, 160.0),
+        }),
+    ];
+
+    generate_pdf(doc, blocks);
 }
 
-struct DocConfig {
+struct Doc {
     width: f32,
     height: f32,
+    doc: PdfDocumentReference,
+    pi: PdfPageIndex,
+    font: IndirectFontRef,
 }
 
-impl DocConfig {
+impl Doc {
     pub fn new(width: f32, height: f32) -> Self {
-        Self { width, height }
+        let (doc, pi, _) = PdfDocument::new("Pdf", Mm(width), Mm(height), "L1");
+        let font = doc
+            .add_builtin_font(BuiltinFont::Helvetica)
+            .expect("You don't have Helvetica for some reason");
+
+        Self {
+            width,
+            height,
+            doc,
+            pi,
+            font,
+        }
+    }
+
+    pub fn add_layer(&self) -> PdfLayerReference {
+        self.doc.get_page(self.pi).add_layer("")
     }
 }
 
-struct Block {
-    items: Vec<Item>,
+trait Renderable {
+    fn render(&self, layer: &PdfLayerReference, doc: &Doc) -> Result<(), Box<dyn Error>>;
+}
+
+struct TextSection {
+    nodes: Vec<Text>,
     pos: (f32, f32),
 }
 
-enum Item {
-    Text {
-        content: String,
-        font_size: f32,
-        line_height: f32,
-    },
-}
-
-fn generate_pdf(doc_config: DocConfig, blocks: Vec<Block>) {
-    let (doc, pi, li) = PdfDocument::new("Pdf", Mm(doc_config.width), Mm(doc_config.height), "L1");
-    let page = doc.get_page(pi);
-    let font = doc
-        .add_builtin_font(BuiltinFont::Helvetica)
-        .expect("not sure this will ever fail");
-
-    for block in blocks {
-        let layer = page.add_layer("");
+impl Renderable for TextSection {
+    fn render(&self, layer: &PdfLayerReference, doc: &Doc) -> Result<(), Box<dyn Error>> {
         layer.begin_text_section();
-        layer.set_text_cursor(Mm(block.pos.0), Mm(doc_config.height - block.pos.1));
+        layer.set_text_cursor(Mm(self.pos.0), Mm(doc.height - self.pos.1));
 
-        for item in block.items {
-            match item {
-                Item::Text {
-                    content,
-                    font_size,
-                    line_height,
-                } => {
-                    layer.set_line_height(line_height);
+        for node in self.nodes.iter() {
+            layer.set_line_height(node.line_height);
 
-                    let lines = content.split("\n");
+            let lines = node.content.split("\n");
 
-                    for line in lines {
-                        layer.set_font(&font, font_size);
-                        layer.write_text(line, &font);
-                        layer.add_line_break();
-                    }
-                }
+            for line in lines {
+                layer.set_font(&doc.font, node.font_size);
+                layer.write_text(line, &doc.font);
+                layer.add_line_break();
             }
         }
 
         layer.end_text_section();
+        Ok(())
+    }
+}
+
+struct Text {
+    content: String,
+    font_size: f32,
+    line_height: f32,
+}
+
+// TODO: support more than just jpeg
+struct Image<P>
+where
+    P: AsRef<Path> + Copy,
+{
+    path: P,
+    dpi: f32,
+    pos: (f32, f32),
+}
+
+impl<P> Renderable for Image<P>
+where
+    P: AsRef<Path> + Copy,
+{
+    fn render(&self, layer: &PdfLayerReference, doc: &Doc) -> Result<(), Box<dyn Error>> {
+        let mut file = OpenOptions::new().read(true).open(self.path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        let bytes: &[u8] = &buffer;
+
+        let mut reader = Cursor::new(bytes);
+        let decoder = JpegDecoder::new(&mut reader)?;
+        let image = printpdf::Image::try_from(decoder)?;
+
+        let image_width: Mm = image.image.width.into_pt(self.dpi).into();
+        let image_height: Mm = image.image.height.into_pt(self.dpi).into();
+
+        image.add_to_layer(
+            layer.clone(),
+            ImageTransform {
+                translate_x: Some(Mm(self.pos.0 - image_width.0)),
+                translate_y: Some(Mm(doc.height - self.pos.1 - image_height.0)),
+                dpi: Some(self.dpi),
+                ..ImageTransform::default()
+            },
+        );
+
+        Ok(())
+    }
+}
+
+fn generate_pdf(doc: Doc, blocks: Vec<Box<dyn Renderable>>) {
+    for block in blocks {
+        let layer = doc.add_layer();
+
+        block.render(&layer, &doc).expect("fail rendering");
     }
 
     let file = File::create("out/test.pdf").unwrap();
 
-    doc.save(&mut BufWriter::new(file)).unwrap();
+    doc.doc.save(&mut BufWriter::new(file)).unwrap();
 }
