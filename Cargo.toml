@@ -1,0 +1,7 @@
+[package]
+name = "pdf-ing"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+printpdf = { version = "0.7.0", features = [ "embedded_images" ] }
