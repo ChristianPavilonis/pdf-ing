@@ -3,12 +3,63 @@ use std::{f32, fs::File, io::BufWriter};
 use printpdf::*;
 
 fn main() {
-    generate_pdf(DocConfig::new(215.9, 279.4), vec![
-        Text::new("Hello\nworld", 12.0, (16.0, 10.0)),
-        Text::new("Foobar", 18.0, (16.0, 25.0)),
-    ]);
+    generate_pdf(
+        DocConfig::new(215.9, 279.4),
+        vec![
+            Block {
+                pos: (16.0, 16.0),
+                items: vec![
+                    Item::Text {
+                        content: "Introduction Header".to_string(),
+                        font_size: 16.0,
+                        line_height: 24.0,
+                    },
+                    Item::Text {
+                        content: "Content under introduction".to_string(),
+                        font_size: 12.0,
+                        line_height: 18.0,
+                    },
+                ],
+            },
+            Block {
+                pos: (16.0, 100.0),
+                items: vec![
+                    Item::Text {
+                        content: "Chapter 1 Header".to_string(),
+                        font_size: 16.0,
+                        line_height: 24.0,
+                    },
+                    Item::Text {
+                        content: "Content of Chapter 1 delving into the intricacies of the topic."
+                            .to_string(),
+                        font_size: 12.0,
+                        line_height: 18.0,
+                    },
+                    Item::Text {
+                        content: "Continuation with Seinfeld humor...yada yada yada.".to_string(),
+                        font_size: 12.0,
+                        line_height: 18.0,
+                    },
+                ],
+            },
+            Block {
+                pos: (16.0, 200.0),
+                items: vec![
+                    Item::Text {
+                        content: "Chapter 2 Header".to_string(),
+                        font_size: 16.0,
+                        line_height: 24.0,
+                    },
+                    Item::Text {
+                        content: "Content of Chapter 2 exploring new dimensions.".to_string(),
+                        font_size: 12.0,
+                        line_height: 18.0,
+                    },
+                ],
+            },
+        ],
+    );
 }
-
 
 struct DocConfig {
     width: f32,
@@ -17,42 +68,24 @@ struct DocConfig {
 
 impl DocConfig {
     pub fn new(width: f32, height: f32) -> Self {
-        Self {
-            width,
-            height,
-        }
+        Self { width, height }
     }
 }
 
-struct Text {
-    content: String,
-    font_size: f32,
-    cursor_pos: (f32, f32),
-    line_height: f32,
+struct Block {
+    items: Vec<Item>,
+    pos: (f32, f32),
 }
 
-impl Text {
-    pub fn new(content: &str, font_size: f32, cursor_pos: (f32, f32)) -> Self {
-        Self {
-            content: content.to_string(),
-            font_size,
-            cursor_pos,
-            ..Default::default()
-        }
-    }
-}
-impl Default for Text {
-    fn default() -> Self {
-        Self {
-            content: String::new(),
-            font_size: 14.0,
-            cursor_pos: (14.0, 14.0),
-            line_height: 18.0,
-        }
-    }
+enum Item {
+    Text {
+        content: String,
+        font_size: f32,
+        line_height: f32,
+    },
 }
 
-fn generate_pdf(doc_config: DocConfig, blocks: Vec<Text>) {
+fn generate_pdf(doc_config: DocConfig, blocks: Vec<Block>) {
     let (doc, pi, li) = PdfDocument::new("Pdf", Mm(doc_config.width), Mm(doc_config.height), "L1");
     let page = doc.get_page(pi);
     let font = doc
@@ -61,18 +94,27 @@ fn generate_pdf(doc_config: DocConfig, blocks: Vec<Text>) {
 
     for block in blocks {
         let layer = page.add_layer("");
-
         layer.begin_text_section();
-        layer.set_line_height(block.line_height);
+        layer.set_text_cursor(Mm(block.pos.0), Mm(doc_config.height - block.pos.1));
 
-        layer.set_text_cursor(Mm(block.cursor_pos.0), Mm(doc_config.height - block.cursor_pos.1));
+        for item in block.items {
+            match item {
+                Item::Text {
+                    content,
+                    font_size,
+                    line_height,
+                } => {
+                    layer.set_line_height(line_height);
 
-        let lines = block.content.split("\n");
+                    let lines = content.split("\n");
 
-        for line in lines {
-            layer.set_font(&font, block.font_size);
-            layer.write_text(line, &font);
-            layer.add_line_break();
+                    for line in lines {
+                        layer.set_font(&font, font_size);
+                        layer.write_text(line, &font);
+                        layer.add_line_break();
+                    }
+                }
+            }
         }
 
         layer.end_text_section();
