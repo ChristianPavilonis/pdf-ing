@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 printpdf = { version = "0.7.0", features = [ "embedded_images" ] }
+thiserror = "2.0.3"
